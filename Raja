@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NCERT Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Noto Serif', serif;
+      background: linear-gradient(to bottom, #dff4c3 0%, white 200px);
+      color: #333;
+    }
+    .nav-menu {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px 0;
+    }
+    .nav-menu select {
+      padding: 10px;
+      font-size: 16px;
+      border: 2px solid #388e3c;
+      border-radius: 5px;
+      background-color: white;
+    }
+    .content {
+      max-width: 740px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .page-text {
+      font-size: 15px;
+      line-height: 1.4;
+      text-align: justify;
+      padding: 10px;
+    }
+    .line[data-category] {
+      background-color: yellow;
+      font-weight: bold;
+    }
+    .bottom-toolbar {
+      position: fixed;
+      bottom: 10px;
+      left: 0;
+      right: 0;
+      background: #fff;
+      padding: 10px;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      z-index: 1000;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    .tool-btn {
+      padding: 10px 14px;
+      font-size: 14px;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tool-btn:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nav-menu">
+    <select id="book-select">
+      <option value="none">Select Book</option>
+      <option value="11th">11th</option>
+      <option value="12th">12th</option>
+    </select>
+    <select id="chapter-select" disabled>
+      <option value="none">Select Chapter</option>
+    </select>
+  </div>
+
+  <div class="content" id="content-area">
+    <div class="page-text">
+      📖 Select book and chapter to view content.
+    </div>
+  </div>
+
+  <div class="bottom-toolbar">
+    <button class="tool-btn" id="save-btn">💾 Save Highlights</button>
+  </div>
+
+  <script>
+    const BASE_URL = "https://ncert-highlighting-tool-back-end.onrender.com";
+    const bookSelect = document.getElementById("book-select");
+    const chapterSelect = document.getElementById("chapter-select");
+    const contentArea = document.getElementById("content-area");
+
+    const chapters = {
+      "11th": ["Chapter 1", "Chapter 2"],
+      "12th": ["Chapter A", "Chapter B"]
+    };
+
+    bookSelect.addEventListener("change", () => {
+      const selectedBook = bookSelect.value;
+      chapterSelect.innerHTML = '<option value="none">Select Chapter</option>';
+      if (chapters[selectedBook]) {
+        chapters[selectedBook].forEach(ch => {
+          const option = document.createElement("option");
+          option.value = ch;
+          option.textContent = ch;
+          chapterSelect.appendChild(option);
+        });
+        chapterSelect.disabled = false;
+      } else {
+        chapterSelect.disabled = true;
+      }
+    });
+
+    chapterSelect.addEventListener("change", () => {
+      const book = bookSelect.value;
+      const chapter = chapterSelect.value;
+      if (book !== "none" && chapter !== "none") {
+        fetch(`${BASE_URL}/api/load_chapter`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ book, chapter })
+        })
+        .then(res => res.json())
+        .then(data => {
+          contentArea.innerHTML = "";
+          const pageText = document.createElement("div");
+          pageText.className = "page-text";
+          const lines = (data.pages?.[0]?.text || "No text found").split("\n");
+          pageText.innerHTML = lines.map(line => `<span class="line">${line}</span><br>`).join("");
+          contentArea.appendChild(pageText);
+          enableLineClicks();
+        });
+      }
+    });
+
+    function enableLineClicks() {
+      document.querySelectorAll(".line").forEach(line => {
+        line.addEventListener("click", () => {
+          const category = prompt("Enter category:");
+          if (!category) return;
+          line.setAttribute("data-category", category);
+          line.style.backgroundColor = "#ffecb3";
+          sendHighlight(line.innerText, category);
+        });
+      });
+    }
+
+    function sendHighlight(text, category) {
+      const book = bookSelect.value;
+      const chapter = chapterSelect.value;
+      const payload = {
+        book,
+        chapter,
+        page: 1,
+        text,
+        category
+      };
+
+      fetch(`${BASE_URL}/api/highlight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert("✅ Highlight saved!");
+      })
+      .catch(err => {
+        alert("❌ Error saving highlight");
+        console.error(err);
+      });
+    }
+
+    document.getElementById("save-btn").addEventListener("click", () => {
+      const book = bookSelect.value;
+      const chapter = chapterSelect.value;
+      const lines = Array.from(document.querySelectorAll(".line[data-category]"));
+      const highlights = lines.map(line => ({
+        text: line.innerText,
+        category: line.getAttribute("data-category")
+      }));
+
+      if (highlights.length === 0) {
+        alert("⚠️ No highlights to save.");
+        return;
+      }
+
+      fetch(`${BASE_URL}/api/save_highlights`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ book, chapter, highlights })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert("✅ All highlights saved.");
+      })
+      .catch(err => {
+        alert("❌ Failed to save highlights.");
+        console.error(err);
+      });
+    });
+  </script>
+
+</body>
+</html>
